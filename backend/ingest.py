@@ -9,13 +9,17 @@ from pinecone import Pinecone, ServerlessSpec
 load_dotenv()
 os.environ["GOOGLE_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
 
-# Initialize Pinecone
-pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
+# Pinecone will be initialized lazily
+pc = None
 
 # Local HF embeddings use dimension 384
 index_name = "repotrace-hf"
 
 def setup_pinecone():
+    global pc
+    if pc is None:
+        pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
+    
     existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
     if index_name not in existing_indexes:
         print(f"Creating Pinecone index: {index_name} (Dimension: 384)...")
