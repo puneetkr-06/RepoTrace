@@ -8,15 +8,10 @@ import os
 from dotenv import load_dotenv
 from typing import Optional
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from langchain_pinecone import PineconeVectorStore
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
 from pinecone import Pinecone
 
-from ingest import ingest_repository
+
 
 load_dotenv()
 os.environ["GOOGLE_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
@@ -59,31 +54,39 @@ def get_embeddings():
 def get_llm():
     global llm
     if llm is None:
+        from langchain_google_genai import ChatGoogleGenerativeAI
         llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
     return llm
 
-system_prompt = (
-    "You are an expert AI coding assistant for a GitHub repository. "
-    "Use the following retrieved context to answer the user's question about the codebase. "
-    "If you don't know the answer, say that you don't know. Use code snippets where relevant.\n\n"
-    "Context:\n{context}"
-)
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_prompt),
-    ("human", "{input}"),
-])
 
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 def get_rag_chain(repo_name: str):
+    from langchain_pinecone import PineconeVectorStore
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.runnables import RunnablePassthrough
+    from langchain_core.output_parsers import StrOutputParser
+
     vectorstore = PineconeVectorStore(
         index_name="repotrace-hf", 
         embedding=get_embeddings(),
         namespace=repo_name
     )
     retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
+
+    system_prompt = (
+        "You are an expert AI coding assistant for a GitHub repository. "
+        "Use the following retrieved context to answer the user's question about the codebase. "
+        "If you don't know the answer, say that you don't know. Use code snippets where relevant.\n\n"
+        "Context:\n{context}"
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{input}"),
+    ])
 
     rag_chain_lcel = (
         {"context": retriever | format_docs, "input": RunnablePassthrough()}
@@ -123,6 +126,7 @@ async def ingest_repo_endpoint(request: IngestRequest):
             pass # Index probably doesn't exist yet, which is fine, we will create it!
             
         # Run synchronously for MVP (will block, but frontend will wait)
+        from ingest import ingest_repository
         ingest_repository(repo_name)
         return {"status": "success", "message": f"Successfully ingested {repo_name}", "repo_name": repo_name}
     except Exception as e:
