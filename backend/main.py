@@ -35,9 +35,28 @@ class ChatRequest(BaseModel):
 class IngestRequest(BaseModel):
     repo_url: str
 
-pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
+# We will initialize these lazily so they don't block the server startup!
+pc = None
+embeddings = None
+llm = None
+
+def get_pinecone():
+    global pc
+    if pc is None:
+        pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
+    return pc
+
+def get_embeddings():
+    global embeddings
+    if embeddings is None:
+        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    return embeddings
+
+def get_llm():
+    global llm
+    if llm is None:
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
+    return llm
 
 system_prompt = (
     "You are an expert AI coding assistant for a GitHub repository. "
@@ -57,7 +76,7 @@ def format_docs(docs):
 def get_rag_chain(repo_name: str):
     vectorstore = PineconeVectorStore(
         index_name="repotrace-hf", 
-        embedding=embeddings,
+        embedding=get_embeddings(),
         namespace=repo_name
     )
     retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
@@ -65,7 +84,7 @@ def get_rag_chain(repo_name: str):
     rag_chain_lcel = (
         {"context": retriever | format_docs, "input": RunnablePassthrough()}
         | prompt
-        | llm
+        | get_llm()
         | StrOutputParser()
     )
     
@@ -92,7 +111,7 @@ async def ingest_repo_endpoint(request: IngestRequest):
     try:
         # Check if already ingested (but handle if index doesn't exist yet)
         try:
-            index = pc.Index("repotrace-hf")
+            index = get_pinecone().Index("repotrace-hf")
             stats = index.describe_index_stats()
             if repo_name in stats.get("namespaces", {}):
                 return {"status": "success", "message": f"Already ingested {repo_name}", "repo_name": repo_name}
