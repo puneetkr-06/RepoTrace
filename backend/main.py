@@ -60,7 +60,7 @@ def get_rag_chain(repo_name: str):
         embedding=embeddings,
         namespace=repo_name
     )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
 
     rag_chain_lcel = (
         {"context": retriever | format_docs, "input": RunnablePassthrough()}
