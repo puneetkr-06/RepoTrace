@@ -1,3 +1,4 @@
+print("=== IMPORTING INGEST.PY ===", flush=True)
 import os
 from dotenv import load_dotenv
 from langchain_community.document_loaders import GithubFileLoader
