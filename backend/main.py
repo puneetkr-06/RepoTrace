@@ -75,7 +75,7 @@ def get_rag_chain(repo_name: str):
         embedding=get_embeddings(),
         namespace=repo_name
     )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
 
     system_prompt = (
         "You are an expert AI coding assistant for a GitHub repository. "
