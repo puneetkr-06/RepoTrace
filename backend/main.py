@@ -47,8 +47,9 @@ def get_pinecone():
 def get_embeddings():
     global embeddings
     if embeddings is None:
-        from langchain_huggingface import HuggingFaceEmbeddings
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        import os
+        from langchain_pinecone import PineconeEmbeddings
+        embeddings = PineconeEmbeddings(model="multilingual-e5-large", pinecone_api_key=os.environ.get("PINECONE_API_KEY"))
     return embeddings
 
 def get_llm():
@@ -70,7 +71,7 @@ def get_rag_chain(repo_name: str):
     from langchain_core.output_parsers import StrOutputParser
 
     vectorstore = PineconeVectorStore(
-        index_name="repotrace-hf", 
+        index_name="repotrace-pc", 
         embedding=get_embeddings(),
         namespace=repo_name
     )
@@ -118,7 +119,7 @@ async def ingest_repo_endpoint(request: IngestRequest):
     try:
         # Check if already ingested (but handle if index doesn't exist yet)
         try:
-            index = get_pinecone().Index("repotrace-hf")
+            index = get_pinecone().Index("repotrace-pc")
             stats = index.describe_index_stats()
             if repo_name in stats.get("namespaces", {}):
                 return {"status": "success", "message": f"Already ingested {repo_name}", "repo_name": repo_name}

@@ -13,8 +13,8 @@ os.environ["GOOGLE_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
 # Pinecone will be initialized lazily
 pc = None
 
-# Local HF embeddings use dimension 384
-index_name = "repotrace-hf"
+# Pinecone API embeddings use dimension 1024
+index_name = "repotrace-pc"
 
 def setup_pinecone():
     global pc
@@ -26,7 +26,7 @@ def setup_pinecone():
         print(f"Creating Pinecone index: {index_name} (Dimension: 384)...")
         pc.create_index(
             name=index_name,
-            dimension=384, 
+            dimension=1024, 
             metric="cosine",
             spec=ServerlessSpec(
                 cloud="aws",
@@ -71,10 +71,10 @@ def ingest_repository(repo_name: str, branch: str = "main"):
     chunks = text_splitter.split_documents(documents)
     print(f"Split into {len(chunks)} searchable chunks.")
 
-    # Setup Local HuggingFace Embeddings
-    print("Loading local embedding model...")
-    from langchain_huggingface import HuggingFaceEmbeddings
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    # Setup Pinecone API Embeddings (Blazing Fast, No PyTorch)
+    print("Connecting to Pinecone Inference API for embeddings...")
+    from langchain_pinecone import PineconeEmbeddings
+    embeddings = PineconeEmbeddings(model="multilingual-e5-large", pinecone_api_key=os.environ.get("PINECONE_API_KEY"))
     
     print("Connecting to Pinecone...")
     index = setup_pinecone()
@@ -96,7 +96,7 @@ def ingest_repository(repo_name: str, branch: str = "main"):
     # We no longer need the time.sleep() wait loops!
     vectorstore.add_documents(chunks)
 
-    print(f"✅ Successfully ingested {repo_name} into Pinecone using Local Embeddings!")
+    print(f"✅ Successfully ingested {repo_name} into Pinecone using API Embeddings!")
 
 if __name__ == "__main__":
     # Example usage
