@@ -80,6 +80,7 @@ def get_rag_chain(repo_name: str):
     system_prompt = (
         "You are an expert AI coding assistant for a GitHub repository. "
         "Use the following retrieved context to answer the user's question about the codebase. "
+        "Answer Concisely If User asks specific question just answer that in 2-3 lines Only give in detail when asked specifically for details or where it is necessary. Else Try to remain very short & concise with your answer"
         "If you don't know the answer, say that you don't know. Use code snippets where relevant.\n\n"
         "Context:\n{context}"
     )
