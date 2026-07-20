@@ -106,7 +106,7 @@ def get_rag_chain(repo_name: str):
             
     return RAGWrapper()
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health_check():
     return {"status": "ok"}
 
