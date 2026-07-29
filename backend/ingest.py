@@ -2,7 +2,7 @@ print("=== IMPORTING INGEST.PY ===", flush=True)
 import os
 from dotenv import load_dotenv
 from langchain_community.document_loaders import GithubFileLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, Language
 
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
@@ -50,7 +50,11 @@ def ingest_repository(repo_name: str, branch: str = "main"):
         access_token=github_token,
         github_api_url="https://api.github.com",
         file_filter=lambda file_path: (
-            file_path.endswith((".py", ".js", ".ts", ".tsx", ".jsx", ".md", ".html", ".css")) and
+            file_path.endswith((
+                ".py", ".js", ".ts", ".tsx", ".jsx", ".md", ".html", ".css",
+                ".cpp", ".c", ".cs", ".java", ".rs", ".go", ".rb", ".php",
+                ".swift", ".kt", ".scala", ".sol", ".ex", ".exs", ".lua", ".pl"
+            )) and
             not any(ignored in file_path for ignored in ["node_modules", "dist", "build", "package-lock.json", ".min.js"])
         )
     )
@@ -62,14 +66,54 @@ def ingest_repository(repo_name: str, branch: str = "main"):
         print(f"Failed to load repository: {e}")
         return
 
-    # Intelligently split the code files into chunks
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-    )
-    
-    chunks = text_splitter.split_documents(documents)
-    print(f"Split into {len(chunks)} searchable chunks.")
+    # Mapping extensions to LangChain Languages for True Syntax-Aware Chunking
+    extension_mapping = {
+        ".py": Language.PYTHON,
+        ".js": Language.JS,
+        ".jsx": Language.JS,
+        ".ts": Language.TS,
+        ".tsx": Language.TS,
+        ".html": Language.HTML,
+        ".md": Language.MARKDOWN,
+        ".cpp": Language.CPP,
+        ".c": Language.C,
+        ".cs": Language.CSHARP,
+        ".java": Language.JAVA,
+        ".rs": Language.RUST,
+        ".go": Language.GO,
+        ".rb": Language.RUBY,
+        ".php": Language.PHP,
+        ".swift": Language.SWIFT,
+        ".kt": Language.KOTLIN,
+        ".scala": Language.SCALA,
+        ".sol": Language.SOL,
+        ".ex": Language.ELIXIR,
+        ".exs": Language.ELIXIR,
+        ".lua": Language.LUA,
+        ".pl": Language.PERL
+    }
+
+    chunks = []
+    generic_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+
+    for doc in documents:
+        # Extract file extension
+        file_path = doc.metadata.get("source", "")
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+
+        if ext in extension_mapping:
+            # Syntax-aware splitting based on the detected language
+            lang = extension_mapping[ext]
+            splitter = RecursiveCharacterTextSplitter.from_language(
+                language=lang, chunk_size=1000, chunk_overlap=200
+            )
+            chunks.extend(splitter.split_documents([doc]))
+        else:
+            # Fallback for extensions like .css or unknown ones
+            chunks.extend(generic_splitter.split_documents([doc]))
+
+    print(f"Split into {len(chunks)} syntax-aware searchable chunks.")
 
     # Setup Pinecone API Embeddings (Blazing Fast, No PyTorch)
     print("Connecting to Pinecone Inference API for embeddings...")
