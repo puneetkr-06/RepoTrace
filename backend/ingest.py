@@ -1,4 +1,4 @@
-print("=== IMPORTING INGEST.PY ===", flush=True)
+# print("=== IMPORTING INGEST.PY ===", flush=True)
 import os
 from dotenv import load_dotenv
 from langchain_community.document_loaders import GithubFileLoader
@@ -23,7 +23,7 @@ def setup_pinecone():
     
     existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
     if index_name not in existing_indexes:
-        print(f"Creating Pinecone index: {index_name} (Dimension: 384)...")
+        print(f"Creating Pinecone index: {index_name} (Dimension: 1024)...")
         pc.create_index(
             name=index_name,
             dimension=1024, 
@@ -35,7 +35,7 @@ def setup_pinecone():
         )
     return pc.Index(index_name)
 
-def ingest_repository(repo_name: str, branch: str = "main"):
+def ingest_repository(repo_name: str, branch: str = None):
     """
     repo_name: e.g. 'puneetkumar/my-repo' or any stranger's public repo
     """
@@ -43,7 +43,19 @@ def ingest_repository(repo_name: str, branch: str = "main"):
     if not github_token or github_token == "your_github_personal_access_token_here":
         raise ValueError("Please provide a valid GITHUB_TOKEN in your .env file.")
 
-    print(f"Loading files from {repo_name}...")
+    if not branch:
+        import requests
+        try:
+            headers = {"Authorization": f"Bearer {github_token}"}
+            res = requests.get(f"https://api.github.com/repos/{repo_name}", headers=headers, timeout=10)
+            if res.status_code == 200:
+                branch = res.json().get("default_branch", "main")
+            else:
+                branch = "main"
+        except Exception:
+            branch = "main"
+
+    print(f"Loading files from {repo_name} (branch: {branch})...")
     loader = GithubFileLoader(
         repo=repo_name,
         branch=branch,
@@ -52,7 +64,7 @@ def ingest_repository(repo_name: str, branch: str = "main"):
         file_filter=lambda file_path: (
             file_path.endswith((
                 ".py", ".js", ".ts", ".tsx", ".jsx", ".md", ".html", ".css",
-                ".cpp", ".c", ".cs", ".java", ".rs", ".go", ".rb", ".php",
+                ".cpp", ".c", ".h", ".hpp", ".cu", ".cuh", ".cs", ".java", ".rs", ".go", ".rb", ".php",
                 ".swift", ".kt", ".scala", ".sol", ".ex", ".exs", ".lua", ".pl"
             )) and
             not any(ignored in file_path for ignored in ["node_modules", "dist", "build", "package-lock.json", ".min.js"])
@@ -64,7 +76,10 @@ def ingest_repository(repo_name: str, branch: str = "main"):
         print(f"Loaded {len(documents)} files.")
     except Exception as e:
         print(f"Failed to load repository: {e}")
-        return
+        raise RuntimeError(f"Failed to load repository from GitHub: {e}")
+
+    if not documents:
+        raise ValueError(f"No compatible code files found in repository '{repo_name}'.")
 
     # Mapping extensions to LangChain Languages for True Syntax-Aware Chunking
     extension_mapping = {
@@ -77,6 +92,10 @@ def ingest_repository(repo_name: str, branch: str = "main"):
         ".md": Language.MARKDOWN,
         ".cpp": Language.CPP,
         ".c": Language.C,
+        ".h": Language.C,
+        ".hpp": Language.CPP,
+        ".cu": Language.CPP,
+        ".cuh": Language.CPP,
         ".cs": Language.CSHARP,
         ".java": Language.JAVA,
         ".rs": Language.RUST,
@@ -114,6 +133,8 @@ def ingest_repository(repo_name: str, branch: str = "main"):
             chunks.extend(generic_splitter.split_documents([doc]))
 
     print(f"Split into {len(chunks)} syntax-aware searchable chunks.")
+    if not chunks:
+        raise ValueError(f"Could not extract any chunks from repository '{repo_name}'.")
 
     # Setup Pinecone API Embeddings (Blazing Fast, No PyTorch)
     print("Connecting to Pinecone Inference API for embeddings...")
