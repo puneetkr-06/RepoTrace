@@ -1,0 +1,16 @@
+# Optional tree-sitter grammars, installed one at a time by run_local.sh.
+# A package that fails to install only means that language keeps using the
+# keyword splitter. Move each one that installs into requirements.txt (pinned).
+tree-sitter-html
+tree-sitter-css
+tree-sitter-markdown
+tree-sitter-c-sharp
+tree-sitter-ruby
+tree-sitter-php
+tree-sitter-swift
+tree-sitter-kotlin
+tree-sitter-scala
+tree-sitter-solidity
+tree-sitter-elixir
+tree-sitter-lua
+tree-sitter-perl

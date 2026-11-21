@@ -60,6 +60,10 @@ UPSERT_BATCH = 96
 # ---------------------------------------------------------------- chunking
 CHUNK_SIZE = _int("CHUNK_SIZE", 1000)
 CHUNK_OVERLAP = _int("CHUNK_OVERLAP", 200)
+# "ast" = tree-sitter chunking (cuts only at syntax-node boundaries) for the
+# languages it has grammars for; "splitter" = LangChain keyword splitter.
+# Changing it makes every repo re-index on its next request.
+CHUNKER = os.environ.get("CHUNKER", "ast")
 # Each chunk adds (CHUNK_SIZE - CHUNK_OVERLAP) new characters, so overlap costs
 # CHUNK_SIZE / (CHUNK_SIZE - CHUNK_OVERLAP) = 1000 / 800 = 1.25x embedding tokens.
 OVERLAP_FACTOR = CHUNK_SIZE / (CHUNK_SIZE - CHUNK_OVERLAP)
@@ -87,9 +91,32 @@ MAX_FILE_BYTES = _int("MAX_FILE_BYTES", 100_000)
 MAX_TARBALL_BYTES = _int("MAX_TARBALL_BYTES", 100_000_000)
 
 # ---------------------------------------------------------------- retrieval / LLM
-# [MEASURE] Pick with evaluate_retrieval.py: smallest k after which recall@k
-# gains less than 2 percentage points per extra chunk.
-TOP_K = _int("TOP_K", 6)
+# [MEASURED] Picked on the 57 dev questions with evaluate_retrieval.py: smallest
+# k after which every extra chunk adds < 2 points of line-level recall.
+# Dev line recall: k=6 84.2%, k=7 87.7%, k=8 91.2%, k=9 93.0%, k=10 93.0%
+# (gains 3.5, 1.8, 0.0 after k=7) -> 8. Held-out test set at k=8: 85.6% +/- 7.3.
+# Re-checked with hybrid retrieval: dev curve k=6 91.2%, k=7..10 96.5%. The
+# rule now says 7, but dev is at its ceiling (2 misses left; one question is
+# 1.75 points, under the 2-point step), so it cannot separate 7 from 8. Kept 8,
+# which was fixed before the hybrid test run. Test at k=8: 93.3% +/- 5.2.
+TOP_K = _int("TOP_K", 8)
+# "hybrid" = vector + BM25 keyword search fused with RRF; "dense" = vector only
+# (the previous behaviour); "bm25" = keyword only. Used for A/B evaluation.
+RETRIEVAL_MODE = os.environ.get("RETRIEVAL_MODE", "hybrid")
+# [LITERATURE] Okapi BM25 defaults (Robertson & Zaragoza 2009; Lucene/Elastic
+# use the same): k1 = how fast repeated words stop adding score, b = how much
+# long chunks are penalised.
+BM25_K1 = _float("BM25_K1", 1.2)
+BM25_B = _float("BM25_B", 0.75)
+# [LITERATURE] RRF constant from Cormack et al. 2009, the standard default.
+RRF_K = _int("RRF_K", 60)
+# [MEASURED on dev only] How deep each list is read before fusing, and the
+# weight of the keyword list. Dev line recall@8 for N = 10/20/30/50 at w = 1:
+# 94.7 / 94.7 / 96.5 / 98.2; for w = 0.5/0.75/1/1.5/2 at N = 30:
+# 94.7 / 96.5 / 96.5 / 96.5 / 96.5 (MRR best at w = 1). RRF k = 10..100 gave
+# the same recall. N = 30 is the smallest N within 2 points of the best.
+HYBRID_CANDIDATES = _int("HYBRID_CANDIDATES", 30)
+KEYWORD_WEIGHT = _float("KEYWORD_WEIGHT", 1.0)
 LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
 # Low temperature because answers must stick to retrieved code. No formula for
 # this one: compare 0 and 0.2 with the eval set before changing it.

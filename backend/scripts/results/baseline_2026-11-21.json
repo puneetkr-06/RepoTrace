@@ -1,0 +1,746 @@
+{
+ "date": "2026-11-21",
+ "setup": {
+  "embedding": "multilingual-e5-large (Pinecone Inference)",
+  "chunk_size": 1000,
+  "chunk_overlap": 200,
+  "file_path_header": true,
+  "retrieved_pool": 10,
+  "questions": "backend/scripts/eval_questions.jsonl"
+ },
+ "ingestion": [
+  {
+   "repo": "puneetkr-06/SudarshanLB",
+   "files": 9,
+   "chunks": 27,
+   "est_tokens": 7574,
+   "embed_tokens": 6568,
+   "chars_per_token": 2.883,
+   "duration_s": 8.05
+  },
+  {
+   "repo": "puneetkr-06/ViewerLens",
+   "files": 15,
+   "chunks": 45,
+   "est_tokens": 12452,
+   "embed_tokens": 10534,
+   "chars_per_token": 2.955,
+   "duration_s": 6.22
+  },
+  {
+   "repo": "puneetkr-06/Custom_Cuda_Optimised_Matrix_Multiplication",
+   "files": 2,
+   "chunks": 45,
+   "est_tokens": 11894,
+   "embed_tokens": 9706,
+   "chars_per_token": 3.064,
+   "duration_s": 9.7
+  },
+  {
+   "repo": "puneetkr-06/RepoTrace",
+   "files": 20,
+   "chunks": 139,
+   "est_tokens": 36606,
+   "embed_tokens": 30375,
+   "chars_per_token": 3.013,
+   "duration_s": 14.87
+  },
+  {
+   "repo": "puneetkr-06/Muysnc",
+   "files": 52,
+   "chunks": 173,
+   "est_tokens": 47093,
+   "embed_tokens": 39938,
+   "chars_per_token": 2.948,
+   "duration_s": 13.63
+  },
+  {
+   "repo": "puneetkr-06/Rentora",
+   "files": 59,
+   "chunks": 366,
+   "est_tokens": 108031,
+   "embed_tokens": 91296,
+   "chars_per_token": 2.958,
+   "duration_s": 29.12
+  }
+ ],
+ "summary": {
+  "dev": {
+   "n": 57,
+   "file_recall_at_k": {
+    "1": 0.5439,
+    "2": 0.7368,
+    "3": 0.7895,
+    "4": 0.8421,
+    "5": 0.9123,
+    "6": 0.9474,
+    "7": 0.9649,
+    "8": 0.9649,
+    "9": 0.9825,
+    "10": 0.9825
+   },
+   "line_recall_at_k": {
+    "1": 0.4737,
+    "2": 0.6491,
+    "3": 0.6667,
+    "4": 0.7018,
+    "5": 0.7895,
+    "6": 0.8421,
+    "7": 0.8772,
+    "8": 0.9123,
+    "9": 0.9298,
+    "10": 0.9298
+   },
+   "mrr10_file": 0.6954,
+   "mrr10_line": 0.6137
+  },
+  "test": {
+   "n": 90,
+   "file_recall_at_k": {
+    "1": 0.4889,
+    "2": 0.6778,
+    "3": 0.7111,
+    "4": 0.7667,
+    "5": 0.8333,
+    "6": 0.8444,
+    "7": 0.8667,
+    "8": 0.8889,
+    "9": 0.9111,
+    "10": 0.9111
+   },
+   "line_recall_at_k": {
+    "1": 0.4333,
+    "2": 0.5667,
+    "3": 0.6778,
+    "4": 0.7222,
+    "5": 0.7889,
+    "6": 0.8,
+    "7": 0.8222,
+    "8": 0.8556,
+    "9": 0.8778,
+    "10": 0.8778
+   },
+   "mrr10_file": 0.6319,
+   "mrr10_line": 0.5731
+  },
+  "all": {
+   "n": 147,
+   "file_recall_at_k": {
+    "1": 0.5102,
+    "2": 0.7007,
+    "3": 0.7415,
+    "4": 0.7959,
+    "5": 0.8639,
+    "6": 0.8844,
+    "7": 0.9048,
+    "8": 0.9184,
+    "9": 0.9388,
+    "10": 0.9388
+   },
+   "line_recall_at_k": {
+    "1": 0.449,
+    "2": 0.5986,
+    "3": 0.6735,
+    "4": 0.7143,
+    "5": 0.7891,
+    "6": 0.8163,
+    "7": 0.8435,
+    "8": 0.8776,
+    "9": 0.898,
+    "10": 0.898
+   },
+   "mrr10_file": 0.6565,
+   "mrr10_line": 0.5889
+  }
+ },
+ "per_question": {
+  "q001": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q002": {
+   "file_rank": 3,
+   "line_rank": 3
+  },
+  "q003": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q004": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q005": {
+   "file_rank": 4,
+   "line_rank": 9
+  },
+  "q006": {
+   "file_rank": 3,
+   "line_rank": 3
+  },
+  "q007": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q008": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q009": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q010": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q011": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q012": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q013": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q014": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q015": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q016": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q017": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q018": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q019": {
+   "file_rank": 2,
+   "line_rank": 3
+  },
+  "q020": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q021": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q022": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q023": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q024": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q025": {
+   "file_rank": 2,
+   "line_rank": null
+  },
+  "q026": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q027": {
+   "file_rank": 1,
+   "line_rank": 8
+  },
+  "q028": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q029": {
+   "file_rank": 1,
+   "line_rank": null
+  },
+  "q030": {
+   "file_rank": 1,
+   "line_rank": 2
+  },
+  "q031": {
+   "file_rank": 4,
+   "line_rank": 7
+  },
+  "q032": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q033": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q034": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q035": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q036": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q037": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q038": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q039": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q040": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q041": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q042": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q043": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q044": {
+   "file_rank": 1,
+   "line_rank": 3
+  },
+  "q045": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q046": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q047": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q048": {
+   "file_rank": 7,
+   "line_rank": 7
+  },
+  "q049": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q050": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q051": {
+   "file_rank": 2,
+   "line_rank": 3
+  },
+  "q052": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q053": {
+   "file_rank": 3,
+   "line_rank": 3
+  },
+  "q054": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q055": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q056": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q057": {
+   "file_rank": 3,
+   "line_rank": 8
+  },
+  "q058": {
+   "file_rank": 1,
+   "line_rank": 2
+  },
+  "q059": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q060": {
+   "file_rank": 2,
+   "line_rank": 4
+  },
+  "q061": {
+   "file_rank": 2,
+   "line_rank": 3
+  },
+  "q062": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q063": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q064": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q065": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q066": {
+   "file_rank": 1,
+   "line_rank": 3
+  },
+  "q067": {
+   "file_rank": 1,
+   "line_rank": 3
+  },
+  "q068": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q069": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q070": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q071": {
+   "file_rank": 4,
+   "line_rank": 4
+  },
+  "q072": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q073": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q074": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q075": {
+   "file_rank": 8,
+   "line_rank": 8
+  },
+  "q076": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q077": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q078": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q079": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q080": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q081": {
+   "file_rank": 2,
+   "line_rank": 7
+  },
+  "q082": {
+   "file_rank": 7,
+   "line_rank": 7
+  },
+  "q083": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q084": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q085": {
+   "file_rank": 6,
+   "line_rank": 6
+  },
+  "q086": {
+   "file_rank": 9,
+   "line_rank": null
+  },
+  "q087": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q088": {
+   "file_rank": 9,
+   "line_rank": null
+  },
+  "q089": {
+   "file_rank": 6,
+   "line_rank": 6
+  },
+  "q090": {
+   "file_rank": 7,
+   "line_rank": 8
+  },
+  "q091": {
+   "file_rank": 4,
+   "line_rank": 4
+  },
+  "q092": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q093": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q094": {
+   "file_rank": 4,
+   "line_rank": 4
+  },
+  "q095": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q096": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q097": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q098": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q099": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q100": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q101": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q102": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q103": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q104": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q105": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q106": {
+   "file_rank": 3,
+   "line_rank": 5
+  },
+  "q107": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q108": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q109": {
+   "file_rank": 8,
+   "line_rank": 8
+  },
+  "q110": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q111": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q112": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q113": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q114": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q115": {
+   "file_rank": 9,
+   "line_rank": null
+  },
+  "q116": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q117": {
+   "file_rank": 2,
+   "line_rank": 3
+  },
+  "q118": {
+   "file_rank": 2,
+   "line_rank": 6
+  },
+  "q119": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q120": {
+   "file_rank": 6,
+   "line_rank": 9
+  },
+  "q121": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q122": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q123": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q124": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q125": {
+   "file_rank": 5,
+   "line_rank": 6
+  },
+  "q126": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q127": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q128": {
+   "file_rank": null,
+   "line_rank": null
+  },
+  "q129": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q130": {
+   "file_rank": 2,
+   "line_rank": 9
+  },
+  "q131": {
+   "file_rank": 4,
+   "line_rank": 4
+  },
+  "q132": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q133": {
+   "file_rank": 5,
+   "line_rank": 5
+  },
+  "q134": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q135": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q136": {
+   "file_rank": 4,
+   "line_rank": 4
+  },
+  "q137": {
+   "file_rank": 3,
+   "line_rank": 3
+  },
+  "q138": {
+   "file_rank": 1,
+   "line_rank": 2
+  },
+  "q139": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q140": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q141": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q142": {
+   "file_rank": 4,
+   "line_rank": 5
+  },
+  "q143": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q144": {
+   "file_rank": 2,
+   "line_rank": 2
+  },
+  "q145": {
+   "file_rank": 2,
+   "line_rank": null
+  },
+  "q146": {
+   "file_rank": 1,
+   "line_rank": 1
+  },
+  "q147": {
+   "file_rank": 1,
+   "line_rank": 2
+  }
+ }
+}

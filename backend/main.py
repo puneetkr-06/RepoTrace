@@ -7,13 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+import chunking
 import config
 import ingest
 import metrics
+import keyword_search
 import rag
 import rate_limit
 import vector_store
-from github_source import RepoError, get_repo_info, parse_repo
+from github_source import RepoError, get_repo_info, load_files, parse_repo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("repotrace.api")
@@ -68,7 +70,8 @@ def start_ingest(body: IngestRequest, request: Request, background: BackgroundTa
     repo = info.full_name
 
     meta = vector_store.read_meta(repo)
-    if meta and meta.get("status") == "ready" and meta.get("commit_sha") == info.commit_sha:
+    if (meta and meta.get("status") == "ready" and meta.get("commit_sha") == info.commit_sha
+            and meta.get("chunker") == chunking.active_chunker()):
         _ready_meta[repo] = meta
         return {"status": "ready", "repo": repo, "commit_sha": info.commit_sha}
 
@@ -135,7 +138,7 @@ def chat(body: ChatRequest, request: Request):
 
     history = [m.model_dump() for m in body.history]
     t0 = time.perf_counter()
-    chunks, query_tokens = rag.retrieve(repo, body.message, history)
+    chunks, query_tokens = rag.retrieve(repo, body.message, history, version=rag.index_version(meta))
     retrieval_ms = (time.perf_counter() - t0) * 1000
 
     def generate():
@@ -166,6 +169,121 @@ def chat(body: ChatRequest, request: Request):
             })
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
+
+
+class RetrieveRequest(BaseModel):
+    repo: str
+    question: str = Field(min_length=1, max_length=2000)
+    top_k: int = Field(default=10, ge=1, le=50)
+    mode: str | None = None  # "dense" | "bm25" | "hybrid"; default config.RETRIEVAL_MODE
+
+
+def _eval_rows(chunks: list[dict]) -> list[dict]:
+    return [
+        {"id": c.get("id"), "path": c["path"], "start_line": int(c["start_line"]),
+         "end_line": int(c["end_line"]), "score": round(c["score"], 4)}
+        for c in chunks
+    ]
+
+
+@app.post("/api/eval/retrieve")
+def eval_retrieve(body: RetrieveRequest, request: Request):
+    """
+    Retrieval only (no Gemini call) for the evaluation scripts.
+    Local requests only; returns 404 anywhere else.
+    """
+    if not rate_limit.is_local(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    repo = parse_repo(body.repo)
+    meta = _ready(repo) or {}
+    t0 = time.perf_counter()
+    chunks, tokens = rag.retrieve(repo, body.question, [], top_k=body.top_k,
+                                  version=rag.index_version(meta), mode=body.mode)
+    return {
+        "mode": body.mode or config.RETRIEVAL_MODE,
+        "query_tokens": tokens,
+        "retrieval_ms": round((time.perf_counter() - t0) * 1000, 1),
+        "results": _eval_rows(chunks),
+    }
+
+
+@app.post("/api/eval/candidates")
+def eval_candidates(body: RetrieveRequest, request: Request):
+    """
+    The raw vector list and the raw BM25 list (top_k each) for one question, so
+    fusion settings can be tuned offline without re-embedding. Local only.
+    """
+    if not rate_limit.is_local(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    repo = parse_repo(body.repo)
+    meta = _ready(repo) or {}
+    dense, tokens = rag.retrieve(repo, body.question, [], top_k=body.top_k, mode="dense")
+    bm = keyword_search.index_for(repo, rag.index_version(meta))
+    return {
+        "query_tokens": tokens,
+        "bm25_build_ms": getattr(bm, "build_ms", None),
+        "bm25_chunks": len(bm.chunks),
+        "dense": _eval_rows(dense),
+        "bm25": _eval_rows(bm.search(body.question, body.top_k)),
+    }
+
+
+@app.get("/api/eval/chunk-stats")
+def eval_chunk_stats(repo: str, request: Request):
+    """
+    Chunks a repo with BOTH chunkers (no embedding, no tokens spent) and reports
+    chunk counts, estimated tokens and how many definitions stay whole.
+    Local requests only.
+    """
+    if not rate_limit.is_local(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    info = get_repo_info(parse_repo(repo))
+    files, _ = load_files(info)
+    out = {"repo": info.full_name, "ast_available": chunking.AST_AVAILABLE,
+           "ast_extensions": chunking.ast_languages(), "files": len(files)}
+    for name in ("splitter", "ast"):
+        chunks = chunking.chunk_files(files, chunker=name)
+        sizes = sorted(len(c.code) for c in chunks)
+        out[name] = {
+            "chunks": len(chunks),
+            "est_tokens": chunking.estimate_tokens(chunks),
+            "median_chunk_chars": sizes[len(sizes) // 2] if sizes else 0,
+            **chunking.integrity(files, chunks),
+        }
+    return out
+
+
+@app.get("/api/eval/file-chunks")
+def eval_file_chunks(repo: str, path: str, request: Request):
+    """Line ranges each chunker produces for one file (debugging). Local only."""
+    if not rate_limit.is_local(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    info = get_repo_info(parse_repo(repo))
+    files, _ = load_files(info)
+    f = next((x for x in files if x.path == path), None)
+    if f is None:
+        raise HTTPException(status_code=404, detail="File not in the ingested set")
+    return {
+        "lines": f.text.count("\n") + 1,
+        **{name: [[c.start_line, c.end_line, len(c.code)] for c in chunking.chunk_file(f, name)]
+           for name in ("splitter", "ast")},
+    }
+
+
+@app.get("/api/eval/index-stats")
+def eval_index_stats(request: Request):
+    """Vector count per namespace, to confirm an index holds only fresh chunks. Local only."""
+    if not rate_limit.is_local(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    stats = vector_store.index().describe_index_stats()
+    namespaces = vector_store._get(stats, "namespaces") or {}
+    return {
+        "total": vector_store._get(stats, "total_vector_count"),
+        "namespaces": {
+            name: vector_store._get(ns, "vector_count") for name, ns in namespaces.items()
+        },
+        "ast_extensions": chunking.ast_languages(),
+    }
 
 
 @app.get("/api/metrics")

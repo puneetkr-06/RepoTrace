@@ -49,7 +49,19 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def is_local(request: Request) -> bool:
+    """
+    True only for a request made on this machine during local development.
+    On Render every request arrives through Render's proxy, which adds
+    X-Forwarded-For and comes from a non-loopback address, so this is False there.
+    """
+    host = request.client.host if request.client else ""
+    return host in ("127.0.0.1", "::1") and "x-forwarded-for" not in request.headers
+
+
 def is_admin(request: Request) -> bool:
+    if is_local(request):
+        return True
     return bool(config.ADMIN_TOKEN) and request.headers.get("x-admin-token") == config.ADMIN_TOKEN
 
 

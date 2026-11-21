@@ -10,6 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 import config
+import keyword_search
 import vector_store
 
 SYSTEM_PROMPT = (
@@ -88,9 +89,30 @@ def retrieval_query(question: str, history: list[dict]) -> str:
     return question
 
 
-def retrieve(repo: str, question: str, history: list[dict], top_k: int | None = None):
-    qvec, tokens = vector_store.embed([retrieval_query(question, history)], "query")
-    return vector_store.query(repo, qvec[0], top_k or config.TOP_K), tokens
+def retrieve(repo: str, question: str, history: list[dict], top_k: int | None = None,
+             version: str = "", mode: str | None = None):
+    """
+    Returns (chunks, query_embedding_tokens).
+    hybrid: vector top-N and BM25 top-N (N = HYBRID_CANDIDATES), fused by RRF,
+    then cut to top_k. `version` (commit SHA + chunker) keys the BM25 cache.
+    """
+    top_k = top_k or config.TOP_K
+    mode = mode or config.RETRIEVAL_MODE
+    q = retrieval_query(question, history)
+    if mode == "bm25":
+        return keyword_search.index_for(repo, version).search(q, top_k), 0
+    qvec, tokens = vector_store.embed([q], "query")
+    if mode == "dense":
+        return vector_store.query(repo, qvec[0], top_k), tokens
+    n = max(top_k, config.HYBRID_CANDIDATES)
+    dense = vector_store.query(repo, qvec[0], n)
+    sparse = keyword_search.index_for(repo, version).search(q, n)
+    fused = keyword_search.rrf([dense, sparse], [1.0, config.KEYWORD_WEIGHT], config.RRF_K, top_k)
+    return fused, tokens
+
+
+def index_version(meta: dict) -> str:
+    return f"{meta.get('commit_sha', '')}:{meta.get('chunker', '')}"
 
 
 def format_context(chunks: list[dict]) -> str:

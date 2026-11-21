@@ -17,6 +17,7 @@ from threading import Lock
 
 import chunking
 import config
+import keyword_search
 import metrics
 import vector_store
 from github_source import RepoError, RepoInfo, load_files
@@ -130,6 +131,7 @@ def run(info: RepoInfo, job: Job):
         chars_per_token = round(embedded_chars / total_tokens, 3) if total_tokens else None
         meta = {
             "status": "ready",
+            "chunker": chunking.active_chunker(),
             "commit_sha": info.commit_sha,
             "branch": info.default_branch,
             "files": stats.files_kept,
@@ -139,10 +141,17 @@ def run(info: RepoInfo, job: Job):
             "ingested_at": datetime.now(timezone.utc).isoformat(),
         }
         vector_store.write_meta(ns, meta)  # LAST step = the repo is complete
+        # Warm the keyword index from the chunks still in memory (no Pinecone reads).
+        keyword_search.prime(ns, f"{meta['commit_sha']}:{meta['chunker']}", [
+            {"id": c.id, "path": c.path, "language": c.language, "start_line": c.start_line,
+             "end_line": c.end_line, "code": c.code}
+            for c in chunks
+        ])
         job.status = "ready"
         job.stage = "done"
         event.update(
             status="ready",
+            chunker=chunking.active_chunker(),
             files=stats.files_kept,
             skipped_size=stats.files_skipped_size,
             skipped_binary=stats.files_skipped_binary,

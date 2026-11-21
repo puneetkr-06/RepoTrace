@@ -200,6 +200,41 @@ def query(ns: str, vector: list[float], top_k: int) -> list[dict]:
     out = []
     for m in _get(res, "matches") or []:
         md = dict(_get(m, "metadata") or {})
+        md["id"] = _get(m, "id")
         md["score"] = float(_get(m, "score", 0.0))
         out.append(md)
     return out
+
+
+def all_chunks(ns: str) -> list[dict]:
+    """
+    Every chunk record of a repo (for the in-memory BM25 index).
+
+    Fast path: ONE query with top_k = 1000 (Pinecone's maximum when metadata is
+    returned) and the chunk filter; the query vector does not matter because
+    every chunk is returned. Measured: list() + fetch() in pages of 100 took
+    14.4 s for a 150-chunk repo, one query takes about a second.
+    A repo at the 250K-token budget is about 250,000 / 264 (measured tokens per
+    chunk) = ~950 chunks, under 1000. If 1000 come back the repo may have more,
+    so fall back to paging with list() + fetch().
+    """
+    res = index().query(vector=_MARKER_VECTOR, top_k=_QUERY_ALL_MAX, namespace=ns,
+                        include_metadata=True, filter={"kind": {"$eq": "chunk"}})
+    matches = _get(res, "matches") or []
+    if len(matches) < _QUERY_ALL_MAX:
+        return [{**dict(_get(m, "metadata") or {}), "id": _get(m, "id")} for m in matches]
+    out = []
+    for ids in index().list(namespace=ns, limit=100):
+        ids = [i for i in ids if i != META_ID]
+        if not ids:
+            continue
+        res = index().fetch(ids=ids, namespace=ns)
+        for vid, rec in (_get(res, "vectors") or {}).items():
+            md = dict(_get(rec, "metadata") or {})
+            if md.get("kind") == "chunk":
+                md["id"] = vid
+                out.append(md)
+    return out
+
+
+_QUERY_ALL_MAX = 1000

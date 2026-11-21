@@ -17,6 +17,11 @@ fi
 echo ">> installing backend packages"
 backend/.venv/bin/pip install -q --upgrade pip
 backend/.venv/bin/pip install -q -r backend/requirements.txt
+echo ">> installing optional tree-sitter grammars (failures are skipped)"
+grep -v '^#' backend/requirements-ast-extra.txt | while read -r pkg; do
+  [ -z "$pkg" ] && continue
+  backend/.venv/bin/pip install -q "$pkg" >/dev/null 2>&1 && echo "   ok   $pkg" || echo "   skip $pkg"
+done
 
 echo ">> installing frontend packages"
 (cd frontend && npm install --no-audit --no-fund)

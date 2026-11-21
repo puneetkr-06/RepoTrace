@@ -2,7 +2,7 @@
 Retrieval evaluation: recall@k with a 95% confidence interval.
 
     cd backend
-    python scripts/evaluate_retrieval.py scripts/eval_questions.jsonl
+    python scripts/evaluate_retrieval.py scripts/eval_questions.jsonl [--mode dense|bm25|hybrid]
 
 Input: one JSON object per line
     {"repo": "owner/name", "question": "...", "expected_files": ["path/a.py"]}
@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import rag  # noqa: E402
+import vector_store  # noqa: E402
 from github_source import parse_repo  # noqa: E402
 
 MAX_K = 10
@@ -38,14 +39,17 @@ GAIN_THRESHOLD = 0.02
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("questions")
+    ap.add_argument("--mode", default=None, help="dense | bm25 | hybrid (default: config)")
     args = ap.parse_args()
 
     rows = [json.loads(l) for l in Path(args.questions).read_text().splitlines() if l.strip()]
     first_hit_rank = []  # 1-based rank of the first relevant chunk, or None
     misses = []
     for row in rows:
-        chunks, _ = rag.retrieve(parse_repo(row["repo"]), row["question"], [], top_k=MAX_K)
-        expected = set(row["expected_files"])
+        repo = parse_repo(row["repo"])
+        version = rag.index_version(vector_store.read_meta(repo) or {})
+        chunks, _ = rag.retrieve(repo, row["question"], [], top_k=MAX_K, version=version, mode=args.mode)
+        expected = set(row.get("expected_files") or [e["path"] for e in row["expected"]])
         rank = next((i + 1 for i, c in enumerate(chunks) if c["path"] in expected), None)
         first_hit_rank.append(rank)
         if rank is None:

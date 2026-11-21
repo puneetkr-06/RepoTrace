@@ -24,6 +24,9 @@ SOURCE_EXTENSIONS = (
 SKIP_DIRS = {
     "node_modules", "dist", "build", "vendor", ".git", "__pycache__", "venv",
     ".venv", ".next", "target", "coverage", "third_party",
+    # Build-tool caches. Found while measuring: one repo had 50K chars of
+    # committed Vite pre-bundled deps in frontend/.vite/deps.
+    ".vite", ".cache", ".parcel-cache", ".turbo", ".svelte-kit",
 }
 SKIP_SUFFIXES = (".min.js", ".min.css", ".map", ".lock", "package-lock.json")
 
