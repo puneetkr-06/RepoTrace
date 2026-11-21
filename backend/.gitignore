@@ -32,3 +32,5 @@ htmlcov/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+.venv/

@@ -1,169 +1,164 @@
-# print("=== IMPORTING INGEST.PY ===", flush=True)
-import os
-from dotenv import load_dotenv
-from langchain_community.document_loaders import GithubFileLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter, Language
+"""
+Ingestion pipeline, run as a background job.
 
-from langchain_pinecone import PineconeVectorStore
-from pinecone import Pinecone, ServerlessSpec
+Flow:  GitHub tarball -> filter files -> language-aware chunks -> budget check
+       -> embed (Pinecone Inference) -> upsert -> write completion marker.
 
-load_dotenv()
-os.environ["GOOGLE_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
+The marker (__repo_meta__) is written only after every chunk is stored, so a
+crash half-way leaves a namespace WITHOUT a marker, which the API treats as
+"not ingested" and re-ingests from scratch. The old code had no marker, so a
+half-finished namespace was reported as "Already ingested".
+"""
+import logging
+import time
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from threading import Lock
 
-# Pinecone will be initialized lazily
-pc = None
+import chunking
+import config
+import metrics
+import vector_store
+from github_source import RepoError, RepoInfo, load_files
 
-# Pinecone API embeddings use dimension 1024
-index_name = "repotrace-pc"
+log = logging.getLogger("repotrace.ingest")
 
-def setup_pinecone():
-    global pc
-    if pc is None:
-        pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
-    
-    existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
-    if index_name not in existing_indexes:
-        print(f"Creating Pinecone index: {index_name} (Dimension: 1024)...")
-        pc.create_index(
-            name=index_name,
-            dimension=1024, 
-            metric="cosine",
-            spec=ServerlessSpec(
-                cloud="aws",
-                region="us-east-1"
-            )
-        )
-    return pc.Index(index_name)
 
-def ingest_repository(repo_name: str, branch: str = None):
-    """
-    repo_name: e.g. 'puneetkumar/my-repo' or any stranger's public repo
-    """
-    github_token = os.environ.get("GITHUB_TOKEN")
-    if not github_token or github_token == "your_github_personal_access_token_here":
-        raise ValueError("Please provide a valid GITHUB_TOKEN in your .env file.")
+@dataclass
+class Job:
+    repo: str
+    commit_sha: str
+    status: str = "queued"          # queued | running | ready | failed
+    stage: str = "queued"           # downloading | chunking | embedding | finalizing
+    files: int = 0
+    chunks_total: int = 0
+    chunks_done: int = 0
+    est_tokens: int = 0
+    error: str | None = None
+    started_at: float = field(default_factory=time.time)
 
-    if not branch:
-        import requests
-        try:
-            headers = {"Authorization": f"Bearer {github_token}"}
-            res = requests.get(f"https://api.github.com/repos/{repo_name}", headers=headers, timeout=10)
-            if res.status_code == 200:
-                branch = res.json().get("default_branch", "main")
-            else:
-                branch = "main"
-        except Exception:
-            branch = "main"
+    def public(self) -> dict:
+        d = asdict(self)
+        d.pop("started_at")
+        return d
 
-    print(f"Loading files from {repo_name} (branch: {branch})...")
-    loader = GithubFileLoader(
-        repo=repo_name,
-        branch=branch,
-        access_token=github_token,
-        github_api_url="https://api.github.com",
-        file_filter=lambda file_path: (
-            file_path.endswith((
-                ".py", ".js", ".ts", ".tsx", ".jsx", ".md", ".html", ".css",
-                ".cpp", ".c", ".h", ".hpp", ".cu", ".cuh", ".cs", ".java", ".rs", ".go", ".rb", ".php",
-                ".swift", ".kt", ".scala", ".sol", ".ex", ".exs", ".lua", ".pl"
-            )) and
-            not any(ignored in file_path for ignored in ["node_modules", "dist", "build", "package-lock.json", ".min.js"])
-        )
-    )
-    
+
+_jobs: dict[str, Job] = {}
+_jobs_lock = Lock()
+
+
+def get_job(repo: str) -> Job | None:
+    with _jobs_lock:
+        return _jobs.get(repo)
+
+
+def try_start(info: RepoInfo) -> tuple[Job, bool]:
+    """Registers a job unless one is already running. Returns (job, created)."""
+    with _jobs_lock:
+        job = _jobs.get(info.full_name)
+        if job and job.status in ("queued", "running"):
+            return job, False
+        job = Job(repo=info.full_name, commit_sha=info.commit_sha)
+        _jobs[info.full_name] = job
+        return job, True
+
+
+def run(info: RepoInfo, job: Job):
+    t0 = time.time()
+    ns = info.full_name
+    event = {"repo": ns, "commit": info.commit_sha}
     try:
-        documents = loader.load()
-        print(f"Loaded {len(documents)} files.")
-    except Exception as e:
-        print(f"Failed to load repository: {e}")
-        raise RuntimeError(f"Failed to load repository from GitHub: {e}")
+        job.status = "running"
 
-    if not documents:
-        raise ValueError(f"No compatible code files found in repository '{repo_name}'.")
+        # Raw text above this can never fit the token cap, even before overlap
+        # and headers are added: chars <= MAX_REPO_TOKENS * chars_per_token / overlap.
+        max_chars = int(config.MAX_REPO_TOKENS * config.CHARS_PER_TOKEN_EST / config.OVERLAP_FACTOR)
 
-    # Mapping extensions to LangChain Languages for True Syntax-Aware Chunking
-    extension_mapping = {
-        ".py": Language.PYTHON,
-        ".js": Language.JS,
-        ".jsx": Language.JS,
-        ".ts": Language.TS,
-        ".tsx": Language.TS,
-        ".html": Language.HTML,
-        ".md": Language.MARKDOWN,
-        ".cpp": Language.CPP,
-        ".c": Language.C,
-        ".h": Language.C,
-        ".hpp": Language.CPP,
-        ".cu": Language.CPP,
-        ".cuh": Language.CPP,
-        ".cs": Language.CSHARP,
-        ".java": Language.JAVA,
-        ".rs": Language.RUST,
-        ".go": Language.GO,
-        ".rb": Language.RUBY,
-        ".php": Language.PHP,
-        ".swift": Language.SWIFT,
-        ".kt": Language.KOTLIN,
-        ".scala": Language.SCALA,
-        ".sol": Language.SOL,
-        ".ex": Language.ELIXIR,
-        ".exs": Language.ELIXIR,
-        ".lua": Language.LUA,
-        ".pl": Language.PERL
-    }
+        job.stage = "downloading"
+        files, stats = load_files(info, max_chars=max_chars)
+        if not files:
+            raise RepoError("No supported source files found in this repository.")
+        job.files = stats.files_kept
 
-    chunks = []
-    generic_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        job.stage = "chunking"
+        chunks = chunking.chunk_files(files)
+        job.chunks_total = len(chunks)
+        job.est_tokens = chunking.estimate_tokens(chunks)
 
-    for doc in documents:
-        # Extract file extension
-        file_path = doc.metadata.get("source", "")
-        _, ext = os.path.splitext(file_path)
-        ext = ext.lower()
-
-        if ext in extension_mapping:
-            # Syntax-aware splitting based on the detected language
-            lang = extension_mapping[ext]
-            splitter = RecursiveCharacterTextSplitter.from_language(
-                language=lang, chunk_size=1000, chunk_overlap=200
+        if job.est_tokens > config.MAX_REPO_TOKENS:
+            raise RepoError(
+                f"Repository needs ~{job.est_tokens:,} embedding tokens; "
+                f"the per-repo limit is {config.MAX_REPO_TOKENS:,}.",
+                413,
             )
-            chunks.extend(splitter.split_documents([doc]))
-        else:
-            # Fallback for extensions like .css or unknown ones
-            chunks.extend(generic_splitter.split_documents([doc]))
+        used = vector_store.tokens_used_this_month()
+        available = config.MONTHLY_EMBED_TOKENS - config.QUERY_TOKEN_RESERVE - used
+        if job.est_tokens > available:
+            raise RepoError(
+                "Monthly free embedding budget is used up "
+                f"({used:,} tokens spent). Try again next month.",
+                429,
+            )
 
-    print(f"Split into {len(chunks)} syntax-aware searchable chunks.")
-    if not chunks:
-        raise ValueError(f"Could not extract any chunks from repository '{repo_name}'.")
+        job.stage = "embedding"
+        vector_store.delete_namespace(ns)  # also removes any old marker
+        total_tokens = 0
+        for i in range(0, len(chunks), config.EMBED_BATCH):
+            batch = chunks[i : i + config.EMBED_BATCH]
+            vectors, tokens = vector_store.embed([c.embed_text for c in batch], "passage")
+            total_tokens += tokens
+            vector_store.upsert_chunks(ns, [
+                {
+                    "id": c.id,
+                    "values": v,
+                    "metadata": {
+                        "kind": "chunk",
+                        "path": c.path,
+                        "language": c.language,
+                        "start_line": c.start_line,
+                        "end_line": c.end_line,
+                        "code": c.code,
+                    },
+                }
+                for c, v in zip(batch, vectors)
+            ])
+            job.chunks_done += len(batch)
 
-    # Setup Pinecone API Embeddings (Blazing Fast, No PyTorch)
-    print("Connecting to Pinecone Inference API for embeddings...")
-    from langchain_pinecone import PineconeEmbeddings
-    embeddings = PineconeEmbeddings(model="multilingual-e5-large", pinecone_api_key=os.environ.get("PINECONE_API_KEY"))
-    
-    print("Connecting to Pinecone...")
-    index = setup_pinecone()
-    
-    print(f"Clearing any existing data for {repo_name} to prevent duplicates...")
-    try:
-        index.delete(delete_all=True, namespace=repo_name)
-    except Exception as e:
-        pass # It's fine if the namespace doesn't exist yet
-    
-    print("Uploading vector embeddings to Pinecone at FULL SPEED...")
-    vectorstore = PineconeVectorStore(
-        index_name=index_name,
-        embedding=embeddings,
-        pinecone_api_key=os.environ.get("PINECONE_API_KEY"),
-        namespace=repo_name
-    )
-    
-    # We no longer need the time.sleep() wait loops!
-    vectorstore.add_documents(chunks)
-
-    print(f"✅ Successfully ingested {repo_name} into Pinecone using API Embeddings!")
-
-if __name__ == "__main__":
-    # Example usage
-    repo_to_ingest = input("Enter a public GitHub repo to ingest (e.g. 'facebook/react' or 'hwchase17/langchain'): ")
-    ingest_repository(repo_to_ingest)
+        job.stage = "finalizing"
+        vector_store.add_tokens_used(total_tokens)
+        embedded_chars = sum(len(c.embed_text) for c in chunks)
+        chars_per_token = round(embedded_chars / total_tokens, 3) if total_tokens else None
+        meta = {
+            "status": "ready",
+            "commit_sha": info.commit_sha,
+            "branch": info.default_branch,
+            "files": stats.files_kept,
+            "chunks": len(chunks),
+            "embed_tokens": total_tokens,
+            "embedded_chars": embedded_chars,
+            "ingested_at": datetime.now(timezone.utc).isoformat(),
+        }
+        vector_store.write_meta(ns, meta)  # LAST step = the repo is complete
+        job.status = "ready"
+        job.stage = "done"
+        event.update(
+            status="ready",
+            files=stats.files_kept,
+            skipped_size=stats.files_skipped_size,
+            skipped_binary=stats.files_skipped_binary,
+            chunks=len(chunks),
+            est_tokens=job.est_tokens,
+            embed_tokens=total_tokens,
+            chars_per_token=chars_per_token,
+            tarball_bytes=stats.tarball_bytes,
+        )
+    except RepoError as e:
+        job.status, job.error = "failed", str(e)
+        event.update(status="failed", error=str(e))
+    except Exception as e:  # unexpected: log the trace, show a short message
+        log.exception("ingestion failed for %s", ns)
+        job.status, job.error = "failed", f"Ingestion failed: {e}"
+        event.update(status="failed", error=str(e))
+    finally:
+        event["duration_s"] = round(time.time() - t0, 2)
+        metrics.record_ingest(event)

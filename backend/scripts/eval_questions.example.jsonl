@@ -1,0 +1,4 @@
+{"repo": "puneetkr-06/RepoTrace", "question": "Where is the Pinecone index created?", "expected_files": ["backend/vector_store.py"]}
+{"repo": "puneetkr-06/RepoTrace", "question": "How are files downloaded from GitHub?", "expected_files": ["backend/github_source.py"]}
+{"repo": "puneetkr-06/RepoTrace", "question": "How is the monthly embedding budget enforced?", "expected_files": ["backend/ingest.py", "backend/vector_store.py"]}
+{"repo": "puneetkr-06/RepoTrace", "question": "How does the frontend read the streamed answer?", "expected_files": ["frontend/src/api.ts"]}
