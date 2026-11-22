@@ -18,7 +18,6 @@ from threading import Lock
 import chunking
 import config
 import keyword_search
-import metrics
 import vector_store
 from github_source import RepoError, RepoInfo, load_files
 
@@ -65,9 +64,7 @@ def try_start(info: RepoInfo) -> tuple[Job, bool]:
 
 
 def run(info: RepoInfo, job: Job):
-    t0 = time.time()
     ns = info.full_name
-    event = {"repo": ns, "commit": info.commit_sha}
     try:
         job.status = "running"
 
@@ -128,7 +125,6 @@ def run(info: RepoInfo, job: Job):
         job.stage = "finalizing"
         vector_store.add_tokens_used(total_tokens)
         embedded_chars = sum(len(c.embed_text) for c in chunks)
-        chars_per_token = round(embedded_chars / total_tokens, 3) if total_tokens else None
         meta = {
             "status": "ready",
             "chunker": chunking.active_chunker(),
@@ -149,25 +145,8 @@ def run(info: RepoInfo, job: Job):
         ])
         job.status = "ready"
         job.stage = "done"
-        event.update(
-            status="ready",
-            chunker=chunking.active_chunker(),
-            files=stats.files_kept,
-            skipped_size=stats.files_skipped_size,
-            skipped_binary=stats.files_skipped_binary,
-            chunks=len(chunks),
-            est_tokens=job.est_tokens,
-            embed_tokens=total_tokens,
-            chars_per_token=chars_per_token,
-            tarball_bytes=stats.tarball_bytes,
-        )
     except RepoError as e:
         job.status, job.error = "failed", str(e)
-        event.update(status="failed", error=str(e))
     except Exception as e:  # unexpected: log the trace, show a short message
         log.exception("ingestion failed for %s", ns)
         job.status, job.error = "failed", f"Ingestion failed: {e}"
-        event.update(status="failed", error=str(e))
-    finally:
-        event["duration_s"] = round(time.time() - t0, 2)
-        metrics.record_ingest(event)

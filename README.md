@@ -132,9 +132,6 @@ python scripts/benchmark_latency.py --api https://repotrace-backend.onrender.com
     --repo owner/name --questions scripts/eval_questions.jsonl --n 100
 ```
 
-Live numbers from real traffic: `GET /api/metrics` (p50/p95 of retrieval,
-first token and total time, plus measured chars/token per ingested repo).
-
 ## Local setup
 
 ```bash

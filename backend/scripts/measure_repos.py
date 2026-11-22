@@ -30,8 +30,15 @@ config.MAX_FILE_BYTES = 10**9
 import chunking  # noqa: E402
 import vector_store  # noqa: E402
 from github_source import get_repo_info, load_files  # noqa: E402
-from metrics import percentile  # noqa: E402
 
+
+
+def percentile(values: list[float], p: float) -> float | None:
+    """Nearest-rank percentile: the value below which p% of samples fall."""
+    if not values:
+        return None
+    s = sorted(values)
+    return s[max(1, math.ceil(p / 100 * len(s))) - 1]
 
 def tokens_of(text: str) -> int | None:
     """Exact token count; None if the text is over the model limit."""

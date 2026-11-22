@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 import chunking
 import config
 import ingest
-import metrics
 import keyword_search
 import rag
 import rate_limit
@@ -137,36 +136,19 @@ def chat(body: ChatRequest, request: Request):
     rate_limit.enforce(rate_limit.chat_global_day, "global", "the AI model (today)")
 
     history = [m.model_dump() for m in body.history]
-    t0 = time.perf_counter()
-    chunks, query_tokens = rag.retrieve(repo, body.message, history, version=rag.index_version(meta))
-    retrieval_ms = (time.perf_counter() - t0) * 1000
+    chunks, _ = rag.retrieve(repo, body.message, history, version=rag.index_version(meta))
 
     def generate():
-        first_token_ms = None
-        status = "ok"
         try:
             cites = rag.citations(repo, meta["commit_sha"], chunks)
             yield json.dumps({"type": "citations", "citations": cites}) + "\n"
             for piece in rag.stream_answer(repo, body.message, history, chunks):
-                if first_token_ms is None:
-                    first_token_ms = (time.perf_counter() - t0) * 1000
                 yield json.dumps({"type": "token", "text": piece}) + "\n"
             yield json.dumps({"type": "done"}) + "\n"
         except Exception as e:
-            status = "error"
             log.exception("chat failed")
             msg = "The AI model is rate-limited. Try again in a minute." if "429" in str(e) else "Failed to generate an answer."
             yield json.dumps({"type": "error", "detail": msg}) + "\n"
-        finally:
-            metrics.record_chat({
-                "repo": repo,
-                "status": status,
-                "retrieval_ms": round(retrieval_ms, 1),
-                "first_token_ms": round(first_token_ms, 1) if first_token_ms else None,
-                "total_ms": round((time.perf_counter() - t0) * 1000, 1),
-                "query_tokens": query_tokens,
-                "chunks": len(chunks),
-            })
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
 
@@ -284,8 +266,3 @@ def eval_index_stats(request: Request):
         },
         "ast_extensions": chunking.ast_languages(),
     }
-
-
-@app.get("/api/metrics")
-def get_metrics():
-    return metrics.summary()

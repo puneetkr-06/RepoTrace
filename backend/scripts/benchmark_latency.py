@@ -19,6 +19,7 @@ say so when quoting the number: a cold start adds tens of seconds.
 """
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -28,8 +29,15 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import config  # noqa: E402
-from metrics import percentile  # noqa: E402
 
+
+
+def percentile(values: list[float], p: float) -> float | None:
+    """Nearest-rank percentile: the value below which p% of samples fall."""
+    if not values:
+        return None
+    s = sorted(values)
+    return s[max(1, math.ceil(p / 100 * len(s))) - 1]
 
 def one(api: str, repo: str, question: str) -> tuple[float | None, float, bool]:
     t0 = time.perf_counter()

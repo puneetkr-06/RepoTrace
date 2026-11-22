@@ -116,6 +116,10 @@ RRF_K = _int("RRF_K", 60)
 # 94.7 / 96.5 / 96.5 / 96.5 / 96.5 (MRR best at w = 1). RRF k = 10..100 gave
 # the same recall. N = 30 is the smallest N within 2 points of the best.
 HYBRID_CANDIDATES = _int("HYBRID_CANDIDATES", 30)
+# [MEASURED] BM25 indexes kept in memory, counted in chunks. ~8 KB per chunk
+# (tracemalloc), so 5,000 chunks = ~40 MB: about 45 average repos or 5 repos at
+# the token cap. An evicted repo is rebuilt from Pinecone in under a second.
+BM25_CACHE_MAX_CHUNKS = _int("BM25_CACHE_MAX_CHUNKS", 5000)
 KEYWORD_WEIGHT = _float("KEYWORD_WEIGHT", 1.0)
 LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
 # Low temperature because answers must stick to retrieved code. No formula for
@@ -147,8 +151,3 @@ CHAT_PER_IP_PER_DAY = max(1, GEMINI_RPD // EXPECTED_DAILY_USERS)
 # [DERIVED] New ingestions per month N = (5M - 0.5M) / 250K = 18.
 # One visitor may use at most ~10% of that per day: 18 x 0.1 = ~2.
 INGEST_PER_IP_PER_DAY = _int("INGEST_PER_IP_PER_DAY", 2)
-
-# ---------------------------------------------------------------- metrics
-# p95 over n samples rests on the top 5% of them; 1000 samples keeps 50 points
-# in that tail, enough for a stable p95.
-METRICS_WINDOW = _int("METRICS_WINDOW", 1000)

@@ -92,11 +92,13 @@ class BM25:
         return [{**self.chunks[i], "score": s} for s, i in scored[:top_k]]
 
 
-# ns -> (version, BM25). LRU so a long-running server does not keep every repo
-# ever searched; 18 repos/month is the ingestion budget, so 32 covers them all.
+# ns -> (version, BM25), least recently used first. The limit is on total
+# chunks, not on repos: measured with tracemalloc, an index costs ~8 KB per
+# chunk (token counts + text), i.e. ~1 MB for an average repo (111 chunks) and
+# ~8 MB for one at the 250K-token cap (~950 chunks). 32 repos at the cap would
+# be ~250 MB on a 512 MB server; BM25_CACHE_MAX_CHUNKS keeps it near 40 MB.
 _cache: "OrderedDict[str, tuple[str, BM25]]" = OrderedDict()
 _lock = threading.Lock()
-_CACHE_SIZE = 32
 
 
 def index_for(ns: str, version: str) -> BM25:
@@ -130,8 +132,10 @@ def prime(ns: str, version: str, chunks: list[dict]) -> BM25:
     with _lock:
         _cache[ns] = (version, bm)
         _cache.move_to_end(ns)
-        while len(_cache) > _CACHE_SIZE:
-            _cache.popitem(last=False)
+        total = sum(len(b.chunks) for _, b in _cache.values())
+        while total > config.BM25_CACHE_MAX_CHUNKS and len(_cache) > 1:
+            _, (_, old) = _cache.popitem(last=False)  # drop the least recently used repo
+            total -= len(old.chunks)
     return bm
 
 
